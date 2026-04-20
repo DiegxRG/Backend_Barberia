@@ -102,6 +102,7 @@
 ```sql
 CREATE TABLE profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  email TEXT,
   full_name TEXT NOT NULL,
   phone TEXT,
   avatar_url TEXT,
@@ -111,6 +112,53 @@ CREATE TABLE profiles (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 ```
+
+#### 5.1.1 Trigger para creación automática de perfiles
+Se requiere un trigger para crear el perfil automáticamente cuando un usuario se registra en Supabase Auth:
+
+```sql
+-- Función que crea perfil automáticamente
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.profiles (id, email, full_name, role, active)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email),
+    COALESCE(NEW.raw_user_meta_data->>'role', 'cliente'),
+    true
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Trigger en auth.users
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+```
+
+#### 5.1.2 Políticas RLS (Row Level Security)
+```sql
+-- Habilitar RLS
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+
+-- Política de lectura: usuarios ven su propio perfil
+CREATE POLICY "Users can view own profile" ON profiles
+  FOR SELECT USING (auth.uid() = id);
+
+-- Política de actualización: usuarios actualizan su propio perfil
+CREATE POLICY "Users can update own profile" ON profiles
+  FOR UPDATE USING (auth.uid() = id);
+
+-- Política de inserción: se maneja automáticamente por el trigger
+-- Para insert manual desde frontend (si fuera necesario):
+CREATE POLICY "Users can insert own profile" ON profiles
+  FOR INSERT WITH CHECK (auth.uid() = id);
+```
+
+> **Nota**: La inserción de perfiles se maneja automáticamente mediante el trigger `on_auth_user_created`. El frontend NO debe intentar insertar en la tabla `profiles` directamente.
 
 ### 5.2 Tabla `services` (catálogo de servicios)
 ```sql
