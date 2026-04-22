@@ -12,3 +12,8 @@ class CalendarStatusResponse(BaseModel):
 class CalendarCallbackResponse(BaseModel):
     connected: bool
     message: str
+    role: str | None = None
+
+
+class CalendarConnectUrlResponse(BaseModel):
+    auth_url: str

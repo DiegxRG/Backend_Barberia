@@ -22,7 +22,7 @@ BEGIN
   VALUES (
     NEW.id,
     COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email),
-    COALESCE(NEW.raw_user_meta_data->>'role', 'cliente')
+    'cliente'
   );
   RETURN NEW;
 END;

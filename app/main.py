@@ -76,6 +76,10 @@ async def health_check():
 from app.routers.auth import router as auth_router
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["Auth"])
 
+# Soporte admin/frontend (consulta de perfiles para vinculaciones)
+from app.routers.users import router as users_router
+app.include_router(users_router, prefix="/api/v1/users", tags=["Usuarios"])
+
 # Fase 1.5:
 from app.routers.services import router as services_router
 app.include_router(services_router, prefix="/api/v1/services", tags=["Servicios"])
@@ -99,7 +103,9 @@ app.include_router(bookings_router, prefix="/api/v1/bookings", tags=["Reservas"]
 # Fase 3.1:
 from app.routers.calendar import router as calendar_router
 app.include_router(calendar_router, prefix="/api/v1/calendar", tags=["Google Calendar"])
+# Alias de compatibilidad para frontend legacy
+app.include_router(calendar_router, prefix="/api/v1/settings/calendar", tags=["Google Calendar"])
 
 # Fase 3.3:
-# from app.routers.dashboard import router as dashboard_router
-# app.include_router(dashboard_router, prefix="/api/v1/dashboard", tags=["Dashboard"])
+from app.routers.stats import router as stats_router
+app.include_router(stats_router, prefix="/api/v1/stats", tags=["Dashboard"])

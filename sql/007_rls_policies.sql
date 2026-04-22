@@ -18,7 +18,11 @@ CREATE POLICY "Users can view own profile"
 -- Usuarios pueden actualizar su propio perfil
 CREATE POLICY "Users can update own profile"
   ON profiles FOR UPDATE
-  USING (auth.uid() = id);
+  USING (auth.uid() = id)
+  WITH CHECK (
+    auth.uid() = id
+    AND role = (SELECT p.role FROM profiles p WHERE p.id = auth.uid())
+  );
 
 -- ── Services ────────────────────────────────────────────────
 ALTER TABLE services ENABLE ROW LEVEL SECURITY;

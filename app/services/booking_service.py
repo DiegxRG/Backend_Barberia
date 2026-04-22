@@ -12,6 +12,7 @@ from app.models.booking import (
     BookingHistoryResponse,
 )
 from app.services.slot_service import slot_service
+from app.services.calendar_service import calendar_service
 from app.utils.errors import (
     NotFoundError,
     ForbiddenError,
@@ -87,6 +88,11 @@ class BookingService:
                 "reason": "Reserva creada",
             }
         )
+        created = self._sync_calendar_upsert(
+            created,
+            service_name=service.get("name"),
+            barber_name=barber.get("full_name"),
+        )
         return BookingResponse(**created)
 
     def list_bookings(
@@ -154,6 +160,7 @@ class BookingService:
                 "reason": payload.reason or "Reserva cancelada",
             }
         )
+        updated = self._sync_calendar_delete(updated)
         return BookingResponse(**updated)
 
     def reschedule_booking(self, booking_id: UUID, payload: BookingReschedule, current_user: dict) -> BookingResponse:
@@ -205,6 +212,7 @@ class BookingService:
                 },
             }
         )
+        updated = self._sync_calendar_upsert(updated)
         return BookingResponse(**updated)
 
     def confirm_booking(self, booking_id: UUID, current_user: dict) -> BookingResponse:
@@ -242,6 +250,8 @@ class BookingService:
                 "reason": f"Cambio de estado a {new_status}",
             }
         )
+        if new_status == "confirmed":
+            updated = self._sync_calendar_upsert(updated)
         return BookingResponse(**updated)
 
     def _validate_advance_window(self, start_at: datetime) -> None:
@@ -303,6 +313,64 @@ class BookingService:
             if barber and booking["barber_id"] == barber["id"]:
                 return
         raise ForbiddenError("No tienes permisos para cambiar el estado de esta reserva")
+
+    def _sync_calendar_upsert(
+        self,
+        booking: dict,
+        service_name: str | None = None,
+        barber_name: str | None = None,
+    ) -> dict:
+        if not settings.GOOGLE_CALENDAR_ENABLED:
+            return booking
+
+        try:
+            barber = queries.get_barber_by_id(UUID(str(booking["barber_id"])))
+            if not barber or not barber.get("user_id"):
+                return booking
+
+            service_title = service_name
+            if not service_title:
+                service = queries.get_service_by_id(UUID(str(booking["service_id"])))
+                service_title = service.get("name") if service else None
+
+            event_id = calendar_service.upsert_booking_event(
+                user_id=str(barber["user_id"]),
+                booking=booking,
+                service_name=service_title,
+                barber_name=barber_name or barber.get("full_name"),
+            )
+            if not event_id or booking.get("calendar_event_id") == event_id:
+                return booking
+
+            updated = queries.update_booking(UUID(str(booking["id"])), {"calendar_event_id": event_id})
+            return updated
+        except Exception as e:
+            # La reserva no debe fallar por un error externo de calendar.
+            print(f"[WARN] Calendar sync upsert omitido para booking {booking.get('id')}: {str(e)}")
+            return booking
+
+    def _sync_calendar_delete(self, booking: dict) -> dict:
+        if not settings.GOOGLE_CALENDAR_ENABLED:
+            return booking
+
+        try:
+            barber = queries.get_barber_by_id(UUID(str(booking["barber_id"])))
+            if not barber or not barber.get("user_id"):
+                return booking
+
+            calendar_service.delete_booking_event(
+                user_id=str(barber["user_id"]),
+                event_id=booking.get("calendar_event_id"),
+            )
+
+            if not booking.get("calendar_event_id"):
+                return booking
+
+            updated = queries.update_booking(UUID(str(booking["id"])), {"calendar_event_id": None})
+            return updated
+        except Exception as e:
+            print(f"[WARN] Calendar sync delete omitido para booking {booking.get('id')}: {str(e)}")
+            return booking
 
 
 booking_service = BookingService()

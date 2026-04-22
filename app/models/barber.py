@@ -17,6 +17,17 @@ class BarberBase(BaseModel):
 class BarberCreate(BarberBase):
     pass
 
+
+class BarberCreateWithAccount(BaseModel):
+    full_name: str = Field(..., min_length=2, max_length=150)
+    email: EmailStr
+    password: str = Field(..., min_length=6, max_length=128)
+    phone: Optional[str] = None
+    specialty: Optional[str] = None
+    bio: Optional[str] = None
+    avatar_url: Optional[str] = None
+    active: bool = Field(default=True)
+
 class BarberUpdate(BaseModel):
     user_id: Optional[UUID] = None
     full_name: Optional[str] = Field(None, min_length=2, max_length=150)

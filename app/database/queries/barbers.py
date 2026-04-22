@@ -26,6 +26,20 @@ def get_barber_by_id(barber_id: UUID) -> Optional[dict]:
     except Exception as e:
         raise DatabaseError(f"Error al obtener barbero: {str(e)}")
 
+
+def get_barber_by_user_id(user_id: str, include_inactive: bool = True) -> Optional[dict]:
+    sb = get_supabase()
+    try:
+        query = sb.table("barbers").select("*").eq("user_id", user_id)
+        if not include_inactive:
+            query = query.eq("active", True)
+        response = query.limit(1).execute()
+        if not response.data:
+            return None
+        return response.data[0]
+    except Exception as e:
+        raise DatabaseError(f"Error al obtener barbero por user_id: {str(e)}")
+
 def create_barber(data: dict) -> dict:
     sb = get_supabase()
     if 'user_id' in data and data['user_id'] is not None:

@@ -62,6 +62,7 @@ def test_callback_stores_encrypted_tokens(monkeypatch):
     result = calendar_service.handle_callback("code-123", state)
 
     assert result.connected is True
+    assert result.role == "admin"
     assert captured["user_id"] == "user-1"
     assert captured["access_token"] != "a-token"
     assert captured["refresh_token"] != "r-token"

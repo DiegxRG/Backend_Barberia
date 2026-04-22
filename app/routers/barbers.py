@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, status, Body
 from typing import List
 from uuid import UUID
 
-from app.models.barber import BarberCreate, BarberUpdate, BarberResponse, BarberWithServicesResponse
+from app.models.barber import BarberCreate, BarberCreateWithAccount, BarberUpdate, BarberResponse, BarberWithServicesResponse
 from app.models.service import ServiceResponse
 from app.services.barber_service import barber_service
 from app.dependencies import require_role, get_optional_user
@@ -30,6 +30,20 @@ def create_barber(barber: BarberCreate):
     Asignación opcional a un user_id de Auth.
     """
     return barber_service.create_barber(barber)
+
+
+@router.post(
+    "/with-account",
+    response_model=BarberResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Crear barbero con cuenta de acceso",
+    dependencies=[Depends(require_role("admin"))],
+)
+def create_barber_with_account(payload: BarberCreateWithAccount):
+    """
+    Crea cuenta de acceso y registro de barbero vinculado en una sola operación.
+    """
+    return barber_service.create_barber_with_account(payload)
 
 @router.patch("/{barber_id}", response_model=BarberResponse, summary="Actualizar barbero", dependencies=[Depends(require_role("admin", "barbero"))])
 def update_barber(barber_id: UUID, barber: BarberUpdate):
