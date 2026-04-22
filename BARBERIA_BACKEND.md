@@ -1245,3 +1245,48 @@ pytest tests/test_slot_engine.py -k "Timezone" -v
 | Conversión Lima→UTC correcta | ✅ `test_lima_to_utc` |
 | Booking cerca de medianoche UTC no cruza día | ✅ `test_booking_near_midnight_utc` |
 | Ventana de búsqueda respeta timezone | ✅ `test_day_boundary_search_window` |
+
+---
+
+## 17) Plan de Ejecución Recomendado (Integración Real 2026-04-22)
+
+### 17.1 Prioridad P0 (bloqueadores funcionales)
+
+1. **Contrato API único (backend como fuente de verdad)**
+   - Resolver desalineaciones activas: `/users`, `/settings/calendar/*`, `/stats/*`.
+   - Documentar contrato final y alinear frontend completo.
+
+2. **Flujo de alta de barbero end-to-end**
+   - Alta por correo y datos operativos del barbero.
+   - Vinculación explícita `barbers.user_id` ↔ `auth.users.id`.
+   - Garantizar `profiles.role='barbero'` para permisos correctos.
+
+3. **Visibilidad operativa de inactivos para admin**
+   - Mantener exclusión de inactivos para cliente.
+   - Exponer gestión admin con `include_inactive=true` para reactivación/auditoría.
+
+### 17.2 Prioridad P1 (operación diaria)
+
+1. Publicar endpoints de dashboard reales y consumirlos en frontend.
+2. Cerrar flujos de gestión de reservas para admin y barbero con UX consistente.
+3. Ejecutar pruebas E2E de negocio (cliente reserva, barbero gestiona, admin supervisa).
+
+### 17.3 Prioridad P2 (automatización y salida a producción)
+
+1. Fase 3.2: sincronización automática con Google Calendar por eventos de booking.
+2. Fase 4: hardening (seguridad, límites, despliegue, observabilidad).
+
+### 17.4 Definición final de estado `barbero.active`
+
+- `active=true`:
+  - visible para clientes,
+  - elegible para slots,
+  - elegible para nuevas reservas.
+
+- `active=false`:
+  - no visible para cliente,
+  - no genera slots,
+  - no permite nuevas reservas,
+  - sigue disponible para gestión/admin con filtros de inactivos.
+
+- Reservas históricas se preservan (no borrado físico).

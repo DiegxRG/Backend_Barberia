@@ -56,3 +56,59 @@ Este documento resume todo lo que hemos desarrollado, implementado y probado has
 - **4.1 Despliegue Config.** Preparar la App con `Docker` y restringir el CORS estricto a las direcciones web verdaderas limitando las peticiones (Rate Limit de ataques DDoS básicos).
 - **4.2 Calidad y Seguridad.** Completar cobertura faltante de endpoints con JWT real + pruebas de bordes y manejo de errores operativos.
 - **4.3 Documentación** Refinando final Swagger.
+
+---
+
+## 📌 Estado de Integración Frontend-Backend (Auditoría 2026-04-22)
+
+### ✅ Lo que ya está correcto en backend
+- Flujo `active/inactive` de barberos está implementado en capas críticas:
+  - `GET /barbers` devuelve activos por defecto.
+  - Slots bloquea barbero inactivo.
+  - Creación de booking bloquea barbero/servicio inactivo.
+  - Resolución de agenda para rol `barbero` usa `barbers.user_id` activo.
+- Soft delete para `services` y `barbers` está operativo con flag `active`.
+
+### ⚠️ Gaps detectados de contrato API (impacto funcional)
+- Frontend admin de barberos aún intenta consumir `GET /users`, endpoint no disponible en backend actual.
+- Frontend calendario usa prefijo `/settings/calendar/*`, backend expone `/calendar/*`.
+- Frontend dashboard consume `/stats/*`, backend no tiene router dashboard activo en `main.py`.
+- Frontend de barberos no está consumiendo `include_inactive=true` para operación administrativa completa.
+- Existen restos de flujo legacy por `localStorage token` en componentes puntuales del frontend.
+
+---
+
+## 🧭 Orden Recomendado de Desarrollo (Aprobado para siguiente ciclo)
+
+### P0 - Contrato estable y operación básica (prioridad máxima)
+1. Congelar contrato API real (backend como fuente de verdad).
+2. Corregir mismatches de rutas frontend (`calendar`, `dashboard`, `users`).
+3. Cerrar flujo de alta de barbero con vínculo real de cuenta (`auth.users` + `profiles.role='barbero'` + `barbers.user_id`).
+4. Asegurar vista/admin con activos + inactivos y acción de reactivación.
+
+### P1 - Operación diaria completa
+1. Consolidar vistas operativas para admin/barbero sobre reservas.
+2. Publicar endpoints dashboard reales y conectar frontend a esos endpoints.
+3. Validar end-to-end con casos de negocio principales (cliente reserva, barbero gestiona, admin supervisa).
+
+### P2 - Automatización y producción
+1. Fase 3.2 Google Calendar sync automático por eventos de booking.
+2. Hardening final (tests, observabilidad, deploy, límites y controles).
+
+---
+
+## ✅ Definición funcional de estado barbero activo/inactivo
+
+- `active=true`:
+  - Visible para cliente en catálogo de barberos.
+  - Elegible en slots.
+  - Elegible para nuevas reservas.
+  - Si está vinculado por `user_id`, puede operar su agenda según rol.
+
+- `active=false`:
+  - No aparece para cliente.
+  - No devuelve slots válidos.
+  - No se permiten nuevas reservas con ese barbero.
+  - Debe seguir visible para admin en modo gestión (`include_inactive=true`) para auditoría o reactivación.
+
+- Las reservas históricas no se eliminan por inactivación (consistencia operativa y reportes).

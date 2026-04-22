@@ -142,6 +142,17 @@ La referencia de integracion endpoint por endpoint (auth, headers, request/respo
 
 - `docs/FRONTEND_API_GUIDE.md`
 
+El estado de avance, auditoria de gaps y orden recomendado de desarrollo esta en:
+
+- `PROGRESO.md`
+
+## Plan recomendado de ejecucion (resumen)
+
+1. **P0 (inmediato):** congelar contrato API real y cerrar gaps de integracion frontend-backend (`/users`, `/settings/calendar`, `/stats`).
+2. **P0 (inmediato):** cerrar flujo de alta y vinculacion de barbero (`auth.users` + `profiles.role='barbero'` + `barbers.user_id`).
+3. **P1:** habilitar dashboard backend real y conectar frontend a metricas productivas.
+4. **P2:** sincronizacion automatica con Google Calendar y hardening para produccion.
+
 ## Seguridad
 
 - No subir `.env` al repositorio.

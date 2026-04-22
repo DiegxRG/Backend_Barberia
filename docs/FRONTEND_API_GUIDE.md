@@ -330,3 +330,38 @@ Reglas importantes:
 - Mostrar mensaje de negocio cuando venga `code=BOOKING_CONFLICT`.
 - En formularios de fecha/hora enviar siempre ISO con timezone (ej: `-05:00`).
 - En reintentos de crear booking reutilizar el mismo `idempotency_key`.
+
+## 11) Estado real de integracion (Auditoria 2026-04-22)
+
+Esta seccion define brecha entre contrato backend actual y consumo frontend detectado.
+
+### 11.1 Gaps de alto impacto
+
+1. **Usuarios para alta de barbero**
+   - Frontend actual intenta `GET /users` para selector de usuario.
+   - Backend actual no expone `GET /users`.
+   - Decision recomendada: reemplazar flujo por alta por correo + vinculacion de cuenta, o crear endpoint admin de usuarios explicitamente.
+
+2. **Google Calendar settings**
+   - Contrato backend: `/api/v1/calendar/connect|callback|status|disconnect`.
+   - Frontend legacy detectado: `/api/v1/settings/calendar/*`.
+   - Accion: migrar frontend al prefijo `/calendar`.
+
+3. **Dashboard stats**
+   - Frontend consume `/api/v1/stats/*`.
+   - Backend no monta router dashboard en `main.py`.
+   - Accion: o publicar router dashboard real o ajustar frontend a endpoints disponibles.
+
+### 11.2 Activo/Inactivo de barbero (comportamiento esperado)
+
+- `GET /barbers` sin `include_inactive` -> solo barberos activos.
+- `GET /barbers?include_inactive=true` -> incluye inactivos si token admin.
+- Slots y bookings ya validan `barber.active=true` para nuevas reservas.
+- Frontend admin debe consumir listado con `include_inactive=true` para poder reactivar/inactivar con trazabilidad operativa.
+
+### 11.3 Checklist minimo para cerrar P0
+
+- [ ] Unificar todas las rutas frontend contra este contrato.
+- [ ] Eliminar uso de token legacy por `localStorage` donde aplique.
+- [ ] Cerrar flujo de alta de barbero con rol y vinculacion de cuenta.
+- [ ] Validar E2E: cliente reserva, barbero gestiona, admin supervisa.

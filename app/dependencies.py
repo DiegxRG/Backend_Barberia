@@ -15,6 +15,7 @@ Uso en routers:
 from fastapi import Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import jwt
+import httpx
 
 from app.config import settings
 from app.database.client import get_supabase
@@ -36,6 +37,8 @@ optional_security = HTTPBearer(
 
 def _resolve_user_from_token(token: str) -> dict:
     """Decodifica token JWT de Supabase y retorna el perfil activo del usuario."""
+    user_id: str | None = None
+
     try:
         payload = jwt.decode(
             token,
@@ -43,12 +46,29 @@ def _resolve_user_from_token(token: str) -> dict:
             algorithms=["HS256"],
             audience="authenticated"
         )
+        user_id = payload.get("sub")
     except jwt.ExpiredSignatureError:
         raise UnauthorizedError("Token expirado. Inicia sesión nuevamente.")
     except jwt.InvalidTokenError:
-        raise UnauthorizedError("Token inválido.")
+        # Fallback para proyectos Supabase con firma asimétrica (JWKS / ES256)
+        # donde la verificación local con HS256 no aplica.
+        try:
+            response = httpx.get(
+                f"{settings.SUPABASE_URL}/auth/v1/user",
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "apikey": settings.SUPABASE_ANON_KEY,
+                },
+                timeout=10,
+            )
+            if response.status_code != 200:
+                raise UnauthorizedError("Token inválido.")
 
-    user_id = payload.get("sub")
+            auth_user = response.json()
+            user_id = auth_user.get("id")
+        except httpx.HTTPError:
+            raise UnauthorizedError("No se pudo validar el token.")
+
     if not user_id:
         raise UnauthorizedError("Token no contiene identificador de usuario.")
 
