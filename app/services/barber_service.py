@@ -109,6 +109,10 @@ class BarberService:
         new_services = queries.get_barber_services(barber_id)
         return [ServiceResponse(**s) for s in new_services]
 
+    def get_barbers_by_service(self, service_id: UUID) -> List[BarberResponse]:
+        data = queries.get_barbers_by_service(service_id)
+        return [BarberResponse(**item) for item in data]
+
     def _validate_user_link(self, user_id: UUID | None, current_barber_id: str | None = None) -> None:
         if user_id is None:
             return

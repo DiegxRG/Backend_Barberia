@@ -100,3 +100,25 @@ def get_barber_services(barber_id: UUID) -> List[dict]:
         return services
     except Exception as e:
         raise DatabaseError(f"Error al obtener servicios asignados: {str(e)}")
+
+def get_barbers_by_service(service_id: UUID) -> List[dict]:
+    """Retorna todos los barberos activos que ofrecen un servicio dado."""
+    sb = get_supabase()
+    try:
+        response = (
+            sb.table("barber_services")
+            .select("barbers(*)")
+            .eq("service_id", str(service_id))
+            .execute()
+        )
+        barbers = []
+        for item in response.data:
+            if "barbers" in item and item["barbers"]:
+                barber = item["barbers"]
+                if isinstance(barber, list) and len(barber) > 0:
+                    barber = barber[0]
+                if isinstance(barber, dict) and barber.get("active", False):
+                    barbers.append(barber)
+        return barbers
+    except Exception as e:
+        raise DatabaseError(f"Error al obtener barberos por servicio: {str(e)}")

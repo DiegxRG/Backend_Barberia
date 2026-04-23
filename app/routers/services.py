@@ -3,7 +3,9 @@ from typing import List
 from uuid import UUID
 
 from app.models.service import ServiceCreate, ServiceUpdate, ServiceResponse
+from app.models.barber import BarberResponse
 from app.services.service_service import service_service
+from app.services.barber_service import barber_service
 from app.dependencies import require_role, get_optional_user
 
 router = APIRouter()
@@ -22,6 +24,15 @@ def get_services(include_inactive: bool = False, current_user: dict | None = Dep
 def get_service(service_id: UUID):
     """Retorna los detalles de un servicio específico por su UUID."""
     return service_service.get_service(service_id)
+
+@router.get("/{service_id}/barbers", response_model=List[BarberResponse], summary="Obtener barberos que ofrecen un servicio")
+def get_barbers_for_service(service_id: UUID):
+    """
+    Retorna todos los barberos activos que ofrecen el servicio indicado.
+    Usado por el flujo de reservas para filtrar barberos por servicio.
+    """
+    service_service.get_service(service_id)
+    return barber_service.get_barbers_by_service(service_id)
 
 @router.post("", response_model=ServiceResponse, status_code=status.HTTP_201_CREATED, summary="Crear un servicio", dependencies=[Depends(require_role("admin"))])
 def create_service(service: ServiceCreate):
