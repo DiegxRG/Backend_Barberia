@@ -4,6 +4,7 @@ from uuid import UUID
 from app.config import settings
 from app.database.queries import slots as queries
 from app.models.slot import SlotsResponse, SlotItem
+from app.utils.cache import TTLCache
 from app.utils.errors import NotFoundError
 from app.utils.timezone import make_local_datetime, to_business_tz, get_day_bounds_utc
 
@@ -25,17 +26,34 @@ def _overlaps(start_a: datetime, end_a: datetime, start_b: datetime, end_b: date
 
 
 class SlotService:
-    def get_available_slots(self, barber_id: UUID, service_id: UUID, target_date: date) -> SlotsResponse:
-        service = queries.get_service_by_id(service_id)
+    def __init__(self):
+        self._catalog_cache: TTLCache[tuple[str, str], dict] = TTLCache(
+            max_items=settings.QUERY_CACHE_MAX_ITEMS,
+            ttl_seconds=settings.QUERY_CACHE_TTL_SECONDS,
+        )
+        self._schedule_cache: TTLCache[tuple[str, str, int], dict | list[dict]] = TTLCache(
+            max_items=settings.QUERY_CACHE_MAX_ITEMS,
+            ttl_seconds=settings.QUERY_CACHE_TTL_SECONDS,
+        )
+
+    def get_available_slots(
+        self,
+        barber_id: UUID,
+        service_id: UUID,
+        target_date: date,
+        service_data: dict | None = None,
+        barber_data: dict | None = None,
+    ) -> SlotsResponse:
+        service = service_data or self._get_service_cached(service_id)
         if not service or not service.get("active", True):
             raise NotFoundError(detail=f"Servicio con ID {service_id} no encontrado o inactivo")
 
-        barber = queries.get_barber_by_id(barber_id)
+        barber = barber_data or self._get_barber_cached(barber_id)
         if not barber or not barber.get("active", True):
             raise NotFoundError(detail=f"Barbero con ID {barber_id} no encontrado o inactivo")
 
         iso_dow = target_date.isoweekday()
-        rule = queries.get_availability_rule(barber_id, iso_dow)
+        rule = self._get_rule_cached(barber_id, iso_dow)
         if not rule:
             return self._build_response(barber_id, service_id, target_date, [])
 
@@ -49,7 +67,7 @@ class SlotService:
         rule_end = _parse_time(rule["end_time"])
         end_limit = make_local_datetime(target_date, rule_end)
 
-        breaks = queries.get_breaks_for_day(barber_id, iso_dow)
+        breaks = self._get_breaks_cached(barber_id, iso_dow)
         break_ranges = [
             (
                 make_local_datetime(target_date, _parse_time(item["start_time"])),
@@ -85,6 +103,53 @@ class SlotService:
                     break
 
         return self._build_response(barber_id, service_id, target_date, slots)
+
+    def clear_cache(self) -> None:
+        self._catalog_cache.clear()
+        self._schedule_cache.clear()
+
+    def _get_service_cached(self, service_id: UUID) -> dict | None:
+        cache_key = ("service", str(service_id))
+        cached = self._catalog_cache.get(cache_key)
+        if cached:
+            return dict(cached)
+
+        service = queries.get_service_by_id(service_id)
+        if service:
+            self._catalog_cache.set(cache_key, service)
+        return service
+
+    def _get_barber_cached(self, barber_id: UUID) -> dict | None:
+        cache_key = ("barber", str(barber_id))
+        cached = self._catalog_cache.get(cache_key)
+        if cached:
+            return dict(cached)
+
+        barber = queries.get_barber_by_id(barber_id)
+        if barber:
+            self._catalog_cache.set(cache_key, barber)
+        return barber
+
+    def _get_rule_cached(self, barber_id: UUID, iso_dow: int) -> dict | None:
+        cache_key = ("rule", str(barber_id), iso_dow)
+        cached = self._schedule_cache.get(cache_key)
+        if isinstance(cached, dict):
+            return dict(cached)
+
+        rule = queries.get_availability_rule(barber_id, iso_dow)
+        if rule:
+            self._schedule_cache.set(cache_key, rule)
+        return rule
+
+    def _get_breaks_cached(self, barber_id: UUID, iso_dow: int) -> list[dict]:
+        cache_key = ("breaks", str(barber_id), iso_dow)
+        cached = self._schedule_cache.get(cache_key)
+        if isinstance(cached, list):
+            return [dict(item) for item in cached]
+
+        breaks = queries.get_breaks_for_day(barber_id, iso_dow)
+        self._schedule_cache.set(cache_key, breaks)
+        return breaks
 
     def _build_response(self, barber_id: UUID, service_id: UUID, target_date: date, slots: list[dict]) -> SlotsResponse:
         return SlotsResponse(

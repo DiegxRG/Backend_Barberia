@@ -34,6 +34,14 @@ class Settings(BaseSettings):
     MIN_BOOKING_ADVANCE_MINUTES: int = 30
     MAX_BOOKING_ADVANCE_DAYS: int = 30
 
+    # ── Performance ───────────────────────────────────────────
+    DEFAULT_PAGE_SIZE: int = 50
+    MAX_PAGE_SIZE: int = 200
+    AUTH_CACHE_TTL_SECONDS: int = 30
+    AUTH_CACHE_MAX_ITEMS: int = 5000
+    QUERY_CACHE_TTL_SECONDS: int = 30
+    QUERY_CACHE_MAX_ITEMS: int = 5000
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

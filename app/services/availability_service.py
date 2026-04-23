@@ -9,6 +9,7 @@ from app.models.availability import (
     FullAvailabilityResponse
 )
 from app.utils.errors import ValidationError
+from app.services.slot_service import slot_service
 
 class AvailabilityService:
     # --- COMBINED ---
@@ -44,6 +45,7 @@ class AvailabilityService:
             
         queries.delete_all_rules(barber_id)
         inserted = queries.bulk_insert_rules(insert_data)
+        slot_service.clear_cache()
         
         return [AvailabilityRuleResponse(**r) for r in inserted]
 
@@ -58,10 +60,12 @@ class AvailabilityService:
         d['end_time'] = d['end_time'].strftime("%H:%M:%S")
         
         inserted = queries.create_break(d)
+        slot_service.clear_cache()
         return BreakResponse(**inserted)
         
     def delete_break(self, break_id: UUID) -> None:
         queries.delete_break(break_id)
+        slot_service.clear_cache()
 
     # --- DAYS OFF ---
     def get_days_off(self, barber_id: UUID, from_date: date = None) -> List[DayOffResponse]:
@@ -75,11 +79,13 @@ class AvailabilityService:
         
         try:
             inserted = queries.create_day_off(d)
+            slot_service.clear_cache()
             return DayOffResponse(**inserted)
         except Exception:
             raise ValidationError("Puede que el día libre ya exista para esta fecha")
             
     def delete_day_off(self, barber_id: UUID, target_date: date) -> None:
         queries.delete_day_off(barber_id, target_date)
+        slot_service.clear_cache()
 
 availability_service = AvailabilityService()

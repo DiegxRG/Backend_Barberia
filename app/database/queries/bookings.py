@@ -113,10 +113,17 @@ def list_bookings(
     status: Optional[str] = None,
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
+    offset: int = 0,
+    limit: int = 50,
 ) -> List[dict]:
     sb = get_supabase()
     try:
-        query = sb.table("bookings").select("*").order("start_at", desc=False)
+        query = (
+            sb.table("bookings")
+            .select("*")
+            .order("start_at", desc=False)
+            .range(offset, offset + limit - 1)
+        )
 
         if client_user_id:
             query = query.eq("client_user_id", client_user_id)

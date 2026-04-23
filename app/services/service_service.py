@@ -2,6 +2,7 @@ from uuid import UUID
 from typing import List
 from app.database.queries import services as queries
 from app.models.service import ServiceCreate, ServiceUpdate, ServiceResponse
+from app.services.slot_service import slot_service
 from app.utils.errors import NotFoundError, ValidationError as BadRequestError
 
 VALID_CATEGORIES = {'corte', 'barba', 'combo', 'tratamiento', 'especial', 'general'}
@@ -26,6 +27,7 @@ class ServiceService:
         data_dict["price"] = float(data_dict["price"])
         
         inserted = queries.create_service(data_dict)
+        slot_service.clear_cache()
         return ServiceResponse(**inserted)
 
     def update_service(self, service_id: UUID, service_data: ServiceUpdate) -> ServiceResponse:
@@ -44,6 +46,7 @@ class ServiceService:
             update_data["price"] = float(update_data["price"])
 
         updated = queries.update_service(service_id, update_data)
+        slot_service.clear_cache()
         return ServiceResponse(**updated)
 
     def deactivate_service(self, service_id: UUID) -> ServiceResponse:
@@ -52,6 +55,7 @@ class ServiceService:
             raise NotFoundError(f"Servicio con ID {service_id} no encontrado")
         
         updated = queries.update_service_status(service_id, active=False)
+        slot_service.clear_cache()
         return ServiceResponse(**updated)
 
 service_service = ServiceService()

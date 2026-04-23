@@ -7,6 +7,7 @@ from app.database.queries import profiles as profile_queries
 from app.database.client import get_supabase
 from app.models.barber import BarberCreate, BarberCreateWithAccount, BarberUpdate, BarberResponse, BarberWithServicesResponse
 from app.models.service import ServiceResponse
+from app.services.slot_service import slot_service
 from app.utils.errors import NotFoundError, ValidationError, InternalError
 
 class BarberService:
@@ -29,6 +30,7 @@ class BarberService:
         data_dict = barber_data.model_dump(exclude_none=True)
         self._validate_user_link(data_dict.get("user_id"))
         inserted = queries.create_barber(data_dict)
+        slot_service.clear_cache()
         return BarberResponse(**inserted)
 
     def create_barber_with_account(self, payload: BarberCreateWithAccount) -> BarberResponse:
@@ -67,6 +69,7 @@ class BarberService:
             barber_data["email"] = payload.email
 
             inserted = queries.create_barber(barber_data)
+            slot_service.clear_cache()
             return BarberResponse(**inserted)
         except Exception as e:
             if created_user_id:
@@ -90,6 +93,7 @@ class BarberService:
 
         self._validate_user_link(update_data.get("user_id"), current_barber_id=existing["id"])
         updated = queries.update_barber(barber_id, update_data)
+        slot_service.clear_cache()
         return BarberResponse(**updated)
 
     def deactivate_barber(self, barber_id: UUID) -> BarberResponse:
@@ -98,6 +102,7 @@ class BarberService:
             raise NotFoundError(f"Barbero con ID {barber_id} no encontrado")
         
         updated = queries.update_barber_status(barber_id, active=False)
+        slot_service.clear_cache()
         return BarberResponse(**updated)
 
     def update_barber_services(self, barber_id: UUID, service_ids: List[UUID]) -> List[ServiceResponse]:
@@ -107,6 +112,7 @@ class BarberService:
             
         queries.assign_services_to_barber(barber_id, service_ids)
         new_services = queries.get_barber_services(barber_id)
+        slot_service.clear_cache()
         return [ServiceResponse(**s) for s in new_services]
 
     def get_barbers_by_service(self, service_id: UUID) -> List[BarberResponse]:

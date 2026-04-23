@@ -19,6 +19,7 @@ import httpx
 
 from app.config import settings
 from app.database.client import get_supabase
+from app.utils.cache import TTLCache
 from app.utils.errors import UnauthorizedError, ForbiddenError
 
 
@@ -34,43 +35,65 @@ optional_security = HTTPBearer(
     description="Token JWT opcional para permisos avanzados"
 )
 
+_token_user_cache: TTLCache[str, str] = TTLCache(
+    max_items=settings.AUTH_CACHE_MAX_ITEMS,
+    ttl_seconds=settings.AUTH_CACHE_TTL_SECONDS,
+)
+_profile_cache: TTLCache[str, dict] = TTLCache(
+    max_items=settings.AUTH_CACHE_MAX_ITEMS,
+    ttl_seconds=settings.AUTH_CACHE_TTL_SECONDS,
+)
+
+
+def invalidate_user_profile_cache(user_id: str | None) -> None:
+    if not user_id:
+        return
+    _profile_cache.delete(user_id)
+
 
 def _resolve_user_from_token(token: str) -> dict:
     """Decodifica token JWT de Supabase y retorna el perfil activo del usuario."""
-    user_id: str | None = None
+    user_id = _token_user_cache.get(token)
 
-    try:
-        payload = jwt.decode(
-            token,
-            settings.SUPABASE_JWT_SECRET,
-            algorithms=["HS256"],
-            audience="authenticated"
-        )
-        user_id = payload.get("sub")
-    except jwt.ExpiredSignatureError:
-        raise UnauthorizedError("Token expirado. Inicia sesión nuevamente.")
-    except jwt.InvalidTokenError:
-        # Fallback para proyectos Supabase con firma asimétrica (JWKS / ES256)
-        # donde la verificación local con HS256 no aplica.
+    if not user_id:
         try:
-            response = httpx.get(
-                f"{settings.SUPABASE_URL}/auth/v1/user",
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "apikey": settings.SUPABASE_ANON_KEY,
-                },
-                timeout=10,
+            payload = jwt.decode(
+                token,
+                settings.SUPABASE_JWT_SECRET,
+                algorithms=["HS256"],
+                audience="authenticated"
             )
-            if response.status_code != 200:
-                raise UnauthorizedError("Token inválido.")
+            user_id = payload.get("sub")
+        except jwt.ExpiredSignatureError:
+            raise UnauthorizedError("Token expirado. Inicia sesión nuevamente.")
+        except jwt.InvalidTokenError:
+            # Fallback para proyectos Supabase con firma asimétrica (JWKS / ES256)
+            # donde la verificación local con HS256 no aplica.
+            try:
+                response = httpx.get(
+                    f"{settings.SUPABASE_URL}/auth/v1/user",
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "apikey": settings.SUPABASE_ANON_KEY,
+                    },
+                    timeout=10,
+                )
+                if response.status_code != 200:
+                    raise UnauthorizedError("Token inválido.")
 
-            auth_user = response.json()
-            user_id = auth_user.get("id")
-        except httpx.HTTPError:
-            raise UnauthorizedError("No se pudo validar el token.")
+                auth_user = response.json()
+                user_id = auth_user.get("id")
+            except httpx.HTTPError:
+                raise UnauthorizedError("No se pudo validar el token.")
 
     if not user_id:
         raise UnauthorizedError("Token no contiene identificador de usuario.")
+
+    _token_user_cache.set(token, user_id)
+
+    cached_profile = _profile_cache.get(user_id)
+    if cached_profile:
+        return dict(cached_profile)
 
     supabase = get_supabase()
     result = supabase.table("profiles").select("*").eq("id", user_id).execute()
@@ -82,7 +105,8 @@ def _resolve_user_from_token(token: str) -> dict:
     if not profile.get("active", True):
         raise UnauthorizedError("Cuenta de usuario desactivada.")
 
-    return profile
+    _profile_cache.set(user_id, profile)
+    return dict(profile)
 
 
 # ── Obtener usuario autenticado ──────────────────────────────

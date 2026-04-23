@@ -4,6 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
 
+from app.config import settings
 from app.dependencies import get_current_user, require_role
 from app.models.booking import (
     BookingCreate,
@@ -27,6 +28,8 @@ def list_bookings(
     status_filter: Optional[str] = Query(default=None, alias="status"),
     from_date: Optional[datetime] = None,
     to_date: Optional[datetime] = None,
+    page: int = Query(default=1, ge=1, description="Página actual (1-indexada)"),
+    page_size: int = Query(default=settings.DEFAULT_PAGE_SIZE, ge=1, le=settings.MAX_PAGE_SIZE, description="Elementos por página"),
     current_user: dict = Depends(get_current_user),
 ):
     return booking_service.list_bookings(
@@ -34,6 +37,8 @@ def list_bookings(
         status=status_filter,
         from_date=from_date,
         to_date=to_date,
+        page=page,
+        page_size=page_size,
     )
 
 

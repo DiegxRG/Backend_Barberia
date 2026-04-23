@@ -20,6 +20,7 @@ from app.utils.errors import (
     BusinessRuleError,
     ValidationError,
 )
+from app.utils.cache import TTLCache
 from app.utils.timezone import to_business_tz, now_utc
 
 
@@ -27,6 +28,12 @@ FINAL_STATUSES = {"cancelled", "completed", "no_show"}
 
 
 class BookingService:
+    def __init__(self):
+        self._barber_by_user_cache: TTLCache[str, dict] = TTLCache(
+            max_items=settings.QUERY_CACHE_MAX_ITEMS,
+            ttl_seconds=settings.QUERY_CACHE_TTL_SECONDS,
+        )
+
     def create_booking(self, payload: BookingCreate, current_user: dict) -> BookingResponse:
         role = current_user.get("role")
         if role not in {"cliente", "admin"}:
@@ -51,7 +58,13 @@ class BookingService:
             raise ValidationError("El barbero no ofrece el servicio seleccionado")
 
         self._validate_advance_window(payload.start_at)
-        self._validate_slot_is_available(payload.barber_id, payload.service_id, payload.start_at)
+        self._validate_slot_is_available(
+            payload.barber_id,
+            payload.service_id,
+            payload.start_at,
+            service,
+            barber,
+        )
 
         duration = timedelta(minutes=int(service["duration_minutes"]))
         end_at = payload.start_at + duration
@@ -101,6 +114,8 @@ class BookingService:
         status: Optional[str] = None,
         from_date: Optional[datetime] = None,
         to_date: Optional[datetime] = None,
+        page: int = 1,
+        page_size: int = settings.DEFAULT_PAGE_SIZE,
     ) -> List[BookingResponse]:
         role = current_user.get("role")
 
@@ -110,7 +125,7 @@ class BookingService:
         if role == "cliente":
             client_user_id = current_user["id"]
         elif role == "barbero":
-            barber = queries.get_barber_by_user_id(current_user["id"])
+            barber = self._get_barber_by_user_id(current_user["id"])
             if not barber:
                 return []
             barber_id = barber["id"]
@@ -123,6 +138,8 @@ class BookingService:
             status=status,
             from_date=from_date.isoformat() if from_date else None,
             to_date=to_date.isoformat() if to_date else None,
+            offset=(page - 1) * page_size,
+            limit=page_size,
         )
         return [BookingResponse(**item) for item in data]
 
@@ -175,11 +192,17 @@ class BookingService:
         self._validate_advance_window(payload.start_at)
         barber_id = UUID(booking["barber_id"])
         service_id = UUID(booking["service_id"])
-        self._validate_slot_is_available(barber_id, service_id, payload.start_at)
 
         service = queries.get_service_by_id(service_id)
-        if not service:
-            raise NotFoundError("Servicio no encontrado")
+        if not service or not service.get("active", True):
+            raise NotFoundError("Servicio no encontrado o inactivo")
+
+        self._validate_slot_is_available(
+            barber_id,
+            service_id,
+            payload.start_at,
+            service,
+        )
 
         end_at = payload.start_at + timedelta(minutes=int(service["duration_minutes"]))
         overlap = queries.get_overlapping_bookings(barber_id, payload.start_at, end_at)
@@ -268,9 +291,22 @@ class BookingService:
                 f"La reserva no puede superar {settings.MAX_BOOKING_ADVANCE_DAYS} días de anticipación"
             )
 
-    def _validate_slot_is_available(self, barber_id: UUID, service_id: UUID, start_at: datetime) -> None:
+    def _validate_slot_is_available(
+        self,
+        barber_id: UUID,
+        service_id: UUID,
+        start_at: datetime,
+        service_data: Optional[dict] = None,
+        barber_data: Optional[dict] = None,
+    ) -> None:
         local_start = to_business_tz(start_at)
-        slots = slot_service.get_available_slots(barber_id, service_id, local_start.date())
+        slots = slot_service.get_available_slots(
+            barber_id,
+            service_id,
+            local_start.date(),
+            service_data,
+            barber_data,
+        )
         target_start = local_start.strftime("%H:%M")
 
         matching_slot = next((slot for slot in slots.slots if slot.start == target_start), None)
@@ -313,6 +349,17 @@ class BookingService:
             if barber and booking["barber_id"] == barber["id"]:
                 return
         raise ForbiddenError("No tienes permisos para cambiar el estado de esta reserva")
+
+    def _get_barber_by_user_id(self, user_id: str) -> dict | None:
+        cached = self._barber_by_user_cache.get(user_id)
+        if cached:
+            return dict(cached)
+
+        barber = queries.get_barber_by_user_id(user_id)
+        if barber:
+            self._barber_by_user_cache.set(user_id, barber)
+            return barber
+        return None
 
     def _sync_calendar_upsert(
         self,

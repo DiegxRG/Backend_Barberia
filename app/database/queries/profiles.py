@@ -35,10 +35,21 @@ def update_profile_role(user_id: str, role: str) -> Dict[str, Any] | None:
     return result.data[0]
 
 
-def list_profiles(role: Optional[str] = None, active: Optional[bool] = None) -> List[Dict[str, Any]]:
+def list_profiles(
+    role: Optional[str] = None,
+    active: Optional[bool] = None,
+    *,
+    offset: int = 0,
+    limit: int = 50,
+) -> List[Dict[str, Any]]:
     """Lista perfiles con filtros opcionales."""
     supabase = get_supabase()
-    query = supabase.table("profiles").select("*").order("full_name")
+    query = (
+        supabase.table("profiles")
+        .select("*")
+        .order("full_name")
+        .range(offset, offset + limit - 1)
+    )
 
     if role is not None:
         query = query.eq("role", role)

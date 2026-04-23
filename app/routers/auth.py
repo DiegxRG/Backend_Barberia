@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 
-from app.dependencies import get_current_user
+from app.dependencies import get_current_user, invalidate_user_profile_cache
 from app.models.auth import ProfileResponse, ProfileUpdate
 from app.database.queries.profiles import update_profile
 from app.utils.errors import NotFoundError
@@ -31,5 +31,7 @@ async def update_my_profile(
     updated = update_profile(current_user["id"], update_dict)
     if not updated:
          raise NotFoundError(resource="Perfil")
-         
+
+    invalidate_user_profile_cache(current_user["id"])
+          
     return updated

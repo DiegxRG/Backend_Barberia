@@ -233,6 +233,8 @@ Reglas importantes:
   - `status`
   - `from_date` (datetime ISO)
   - `to_date` (datetime ISO)
+  - `page` (default `1`)
+  - `page_size` (default `50`, max `200`)
 
 ## 7.3 Detalle
 

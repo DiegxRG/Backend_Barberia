@@ -117,6 +117,15 @@ venv/Scripts/python.exe -c "from cryptography.fernet import Fernet; print(Fernet
 - `MIN_BOOKING_ADVANCE_MINUTES` (ej: `30`)
 - `MAX_BOOKING_ADVANCE_DAYS` (ej: `30`)
 
+### Performance
+
+- `DEFAULT_PAGE_SIZE` (ej: `50`)
+- `MAX_PAGE_SIZE` (ej: `200`)
+- `AUTH_CACHE_TTL_SECONDS` (ej: `30`)
+- `AUTH_CACHE_MAX_ITEMS` (ej: `5000`)
+- `QUERY_CACHE_TTL_SECONDS` (ej: `30`)
+- `QUERY_CACHE_MAX_ITEMS` (ej: `5000`)
+
 ## Base de datos
 
 - Migracion consolidada: `sql/000_ALL_MIGRATIONS.sql`
